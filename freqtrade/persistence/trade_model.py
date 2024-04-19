@@ -545,6 +545,56 @@ class LocalTrade:
         return len(open_orders_wo_sl) > 0
 
     @property
+    def has_open_entry_orders(self) -> bool:
+        """
+        True if there are open entry orders for this trade
+        """
+        open_entry_orders = [
+            o for o in self.orders
+            if o.ft_order_side == self.entry_side and o.ft_is_open
+        ]
+        return len(open_entry_orders) > 0
+
+    @property
+    def has_open_position(self) -> bool:
+        """
+        True if there is an open position for this trade
+        """
+        entry_orders = [
+            o for o in self.orders
+            if o.ft_order_side == self.entry_side
+        ]
+        entry_orders_filled_qty = sum(eno.safe_filled for eno in entry_orders)
+
+        exit_orders = [
+            o for o in self.orders
+            if o.ft_order_side == self.exit_side
+        ]
+        exit_orders_filled_qty = sum(exo.safe_filled for exo in exit_orders)
+
+        return (entry_orders_filled_qty - exit_orders_filled_qty) > 0
+
+    @property
+    def has_untied_assets(self) -> bool:
+        """
+        True if there is still remaining position not yet tied up to exit order
+        """
+        entry_orders = [
+            o for o in self.orders
+            if o.ft_order_side == self.entry_side
+        ]
+        entry_orders_filled_qty = sum(eno.safe_filled for eno in entry_orders)
+
+        exit_orders = [
+            o for o in self.orders
+            if o.ft_order_side == self.exit_side
+        ]
+        exit_orders_remaining_qty = sum(exo.safe_remaining for exo in exit_orders)
+        untied_remaining = entry_orders_filled_qty - exit_orders_remaining_qty
+
+        return untied_remaining > 0
+
+    @property
     def open_sl_orders(self) -> List[Order]:
         """
         All open stoploss orders for this trade
