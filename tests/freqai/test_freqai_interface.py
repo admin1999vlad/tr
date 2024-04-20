@@ -15,7 +15,8 @@ from freqtrade.persistence import Trade
 from freqtrade.plugins.pairlistmanager import PairListManager
 from tests.conftest import EXMS, create_mock_trades, get_patched_exchange, log_has_re
 from tests.freqai.conftest import (get_patched_freqai_strategy, is_arm, is_mac, make_rl_config,
-                                   mock_pytorch_mlp_model_training_parameters)
+                                   mock_pytorch_mlp_model_training_parameters,
+                                   mock_tensorflow_model_training_parameters)
 
 
 def can_run_model(model: str) -> None:
@@ -35,6 +36,7 @@ def can_run_model(model: str) -> None:
     ('CatboostRegressor', False, False, False, True, True, 0, 0),
     ('PyTorchMLPRegressor', False, False, False, False, False, 0, 0),
     ('PyTorchTransformerRegressor', False, False, False, False, False, 0, 0),
+    ('TensorFlowLSTMRegressor', False, False, False, False, False, 0, 0),
     ('ReinforcementLearner', False, True, False, True, False, 0, 0),
     ('ReinforcementLearner_multiproc', False, False, False, True, False, 0, 0),
     ('ReinforcementLearner_test_3ac', False, False, False, False, False, 0, 0),
@@ -81,7 +83,13 @@ def test_extract_data_and_train_model_Standard(mocker, freqai_conf, model, pca,
         if 'Transformer' in model:
             # transformer model takes a window, unlike the MLP regressor
             freqai_conf.update({"conv_width": 10})
+    if 'TensorFlow' in model:
+        model_save_ext = 'keras'
+        freqai_conf['keras'] = True
+        tf_mtp = mock_tensorflow_model_training_parameters()
+        freqai_conf['freqai']['model_training_parameters'].update(tf_mtp)
 
+    freqai_conf['freqai']['model_save_type'] = model_save_ext
     strategy = get_patched_freqai_strategy(mocker, freqai_conf)
     exchange = get_patched_exchange(mocker, freqai_conf)
     strategy.dp = DataProvider(freqai_conf, exchange)
@@ -168,6 +176,7 @@ def test_extract_data_and_train_model_MultiTargets(mocker, freqai_conf, model, s
     'XGBoostRFClassifier',
     'SKLearnRandomForestClassifier',
     'PyTorchMLPClassifier',
+    'TensorFlowClassifier',
     ])
 def test_extract_data_and_train_model_Classifiers(mocker, freqai_conf, model):
     can_run_model(model)
@@ -186,7 +195,7 @@ def test_extract_data_and_train_model_Classifiers(mocker, freqai_conf, model):
     freqai.dk.live = True
     timerange = TimeRange.parse_timerange("20180110-20180130")
     freqai.dd.load_all_pair_histories(timerange, freqai.dk)
-
+    freqai.dd.model_type = 'keras' if 'TensorFlow' in model else 'joblib'
     freqai.dd.pair_dict = MagicMock()
 
     data_load_timerange = TimeRange.parse_timerange("20180110-20180130")
@@ -200,10 +209,17 @@ def test_extract_data_and_train_model_Classifiers(mocker, freqai_conf, model):
         pytorch_mlp_mtp = mock_pytorch_mlp_model_training_parameters()
         freqai_conf['freqai']['model_training_parameters'].update(pytorch_mlp_mtp)
 
+    if 'TensorFlow' in model:
+        freqai_conf['keras'] = True
+        tf_mtp = mock_tensorflow_model_training_parameters()
+        freqai_conf['freqai']['model_training_parameters'].update(tf_mtp)
+
     if freqai.dd.model_type == 'joblib':
         model_file_extension = ".joblib"
     elif freqai.dd.model_type == "pytorch":
         model_file_extension = ".zip"
+    elif freqai.dd.model_type == "keras":
+        model_file_extension = ".keras"
     else:
         raise Exception(f"Unsupported model type: {freqai.dd.model_type},"
                         f" can't assign model_file_extension")
